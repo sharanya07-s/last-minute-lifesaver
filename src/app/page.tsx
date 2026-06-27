@@ -6,304 +6,241 @@ import {
   Calendar, 
   CheckCircle, 
   Clock, 
+  Copy, 
+  Edit3, 
   Mic, 
   Send, 
-  Sparkles, 
-  Zap, 
-  RefreshCw 
+  Sparkles 
 } from "lucide-react";
 
-// --- Types ---
+// Strict TypeScript interfaces matching your backend JSON contract
 interface MicroSession {
   title: string;
   durationMinutes: number;
 }
 
-interface TaskData {
-  id?: string;
+interface TriagePayload {
   taskName: string;
   panicScore: number;
-  urgencyReason: string;
-  actionHubType: "mock_interview" | "draft_generator" | "research_summary" | string;
+  calculatedUrgencyReason: string;
   microSessions: MicroSession[];
+  actionHubType: "mock_interview" | "draft_generator" | "research_summary";
+  generatedScript?: string;
 }
 
 export default function Dashboard() {
-  // --- Core States ---
-  const [stressInput, setStressInput] = useState("");
+  const [inputTask, setInputTask] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [currentTask, setCurrentTask] = useState<TaskData | null>(null);
+  const [copied, setCopied] = useState(false);
   
-  // Simulated historic/recent tasks to pad out the Panic Triage list visually
-  const [recentTasks, setRecentTasks] = useState<TaskData[]>([
-    {
-      taskName: "Database Schema Submission",
-      panicScore: 45,
-      urgencyReason: "Due in 6 hours; core design needs validation.",
-      actionHubType: "research_summary",
-      microSessions: [
-        { title: "Review indexes", durationMinutes: 15 },
-        { title: "Export SQL DDL", durationMinutes: 20 }
-      ]
-    }
-  ]);
+  // App state initializing with your working Presentation Readiness snapshot
+  const [apiResponse, setApiResponse] = useState<TriagePayload | null>({
+    taskName: "Emergency Presentation Readiness",
+    panicScore: 88,
+    calculatedUrgencyReason: "Calibration emergency presentation needs immediate structure and script deployment to prevent deadline lapse.",
+    actionHubType: "draft_generator",
+    generatedScript: `Dear Team,\n\nRegarding the urgent deliverables for "Emergency Presentation Readiness", I have triaged our immediate execution steps. We are establishing a focused containment strategy to lock down the database schema submission (currently at 45%) and align our core technical blocks.\n\nPlease review the chronological micro-sessions detailed in our pipeline dashboard so we can synchronize effectively.\n\nBest regards,\n[Your Name]`,
+    microSessions: [
+      { title: "Review Core Slides & Structure", durationMinutes: 30 },
+      { title: "Draft Team Alignment Script", durationMinutes: 45 },
+      { title: "Finalize Schema Submission Sync", durationMinutes: 30 }
+    ]
+  });
 
-  // --- Handlers ---
+  // Core handler sending user crisis straight to the Gemini API
   const handleStressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stressInput.trim()) return;
+    if (!inputTask.trim()) return;
 
     setIsLoading(true);
     try {
       const response = await fetch("/api/triage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stressInput }),
+        body: JSON.stringify({ rawInput: inputTask }),
       });
 
-      const data = await response.json();
-
-      if (data.success || data.taskName) {
-        const parsedTask: TaskData = {
-          taskName: data.taskName,
-          panicScore: data.panicScore || 50,
-          urgencyReason: data.urgencyReason || "Calculated priority threshold active.",
-          actionHubType: data.actionHubType || "research_summary",
-          microSessions: data.microSessions || []
-        };
-
-        setCurrentTask(parsedTask);
-        setRecentTasks(prev => [parsedTask, ...prev]);
-        setStressInput("");
-      } else {
-        alert("Server responded but could not process the crisis data format.");
-      }
-    } catch (err) {
-      console.error("Triage Error:", err);
-      alert("Failed to reach triage engine. Check console logs.");
+      if (!response.ok) throw new Error("API Triage failed");
+      const data: TriagePayload = await response.json();
+      setApiResponse(data);
+      setInputTask("");
+    } catch (error) {
+      console.error("Error triaging stress input:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSyncToGoogleCalendar = async () => {
-    if (!currentTask || !currentTask.microSessions || currentTask.microSessions.length === 0) {
-      alert("No active timeline sessions found to sync! Please triage a task first.");
-      return;
-    }
-
-    let currentStartTime = new Date();
-
-    console.log("=== Packaging Timeblocks for Google Calendar Framework ===");
-    
-    currentTask.microSessions.forEach((session) => {
-      const durationMin = Number(session.durationMinutes) || 30;
-      
-      const year = currentStartTime.getFullYear();
-      const month = String(currentStartTime.getMonth() + 1).padStart(2, '0');
-      const day = String(currentStartTime.getDate()).padStart(2, '0');
-      const hours = String(currentStartTime.getHours()).padStart(2, '0');
-      const minutes = String(currentStartTime.getMinutes()).padStart(2, '0');
-      const startString = `${year}${month}${day}T${hours}${minutes}`;
-
-      console.log(`Structured: [Life Saver] ${session.title} | Start: ${startString} | Duration: ${durationMin}m`);
-      
-      // Push time forward for successive time-blocking
-      currentStartTime = new Date(currentStartTime.getTime() + durationMin * 60 * 1000);
-    });
-
-    alert("📅 Micro-sessions structured successfully! Ready to push directly to Google Calendar.");
-  };
-
-  // Helper helper to color-code panic gauges dynamically
-  const getPanicColor = (score: number) => {
-    if (score >= 80) return "text-rose-500 border-rose-500/30 bg-rose-500/10";
-    if (score >= 50) return "text-amber-500 border-amber-500/30 bg-amber-500/10";
-    return "text-emerald-500 border-emerald-500/30 bg-emerald-500/10";
+  const handleCopy = () => {
+    if (!apiResponse?.generatedScript) return;
+    navigator.clipboard.writeText(apiResponse.generatedScript);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans p-6 selection:bg-rose-500 selection:text-white">
-      {/* Header Container */}
-      <header className="max-w-7xl mx-auto flex items-center justify-between border-b border-zinc-800 pb-5 mb-8">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased selection:bg-emerald-500/30">
+      {/* Header */}
+      <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-rose-600 rounded-xl shadow-lg shadow-rose-600/20 animate-pulse">
-            <AlertTriangle className="w-6 h-6 text-white" />
+          <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/20 text-red-400">
+            <AlertTriangle className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white">The Last-Minute Life Saver</h1>
-            <p className="text-xs text-zinc-400">High-Agency Proactive AI Companion</p>
+            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r pt-0.5 from-zinc-100 to-zinc-400 bg-clip-text text-transparent">
+              The Last-Minute Life Saver
+            </h1>
+            <p className="text-xs text-zinc-500 font-mono">Status: Active Execution Sandbox</p>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-zinc-400 bg-zinc-900 px-4 py-2 rounded-lg border border-zinc-800">
-          <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-amber-500" /> Pipeline Live</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-xs font-mono text-zinc-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+          Production Live
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left & Center Space: Input, Triage Grid, Action Hub */}
-        <div className="lg:col-span-2 space-y-8">
+      <main className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Omni-Input Bar */}
+        <form onSubmit={handleStressSubmit} className="relative group">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-red-500 to-orange-500 rounded-xl opacity-20 group-focus-within:opacity-40 transition duration-300 blur-sm" />
+          <div className="relative flex items-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 shadow-xl">
+            <Sparkles className="w-5 h-5 text-zinc-500 mr-3 shrink-0" />
+            <input
+              type="text"
+              value={inputTask}
+              onChange={(e) => setInputTask(e.target.value)}
+              disabled={isLoading}
+              placeholder="What's stressing you out right now? (e.g., 'Presentation in 2 hours and I have no slides...')"
+              className="w-full bg-transparent text-zinc-100 placeholder-zinc-500 focus:outline-none text-sm disabled:opacity-50"
+            />
+            <button type="button" className="p-2 text-zinc-500 hover:text-zinc-300 transition shrink-0">
+              <Mic className="w-4 h-4" />
+            </button>
+            <button 
+              type="submit" 
+              disabled={isLoading}
+              className="ml-2 flex items-center gap-2 px-4 py-2 bg-zinc-100 text-zinc-950 font-medium text-xs rounded-lg hover:bg-zinc-200 transition disabled:opacity-50 font-mono shrink-0"
+            >
+              {isLoading ? "Triaging..." : <>Triage <Send className="w-3 h-3" /></>}
+            </button>
+          </div>
+        </form>
+
+        {/* Core Layout Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Omni-Input Bar Section */}
-          <section className="bg-zinc-900 rounded-2xl p-5 border border-zinc-800 shadow-xl">
-            <h2 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" /> What's stressing you out right now?
-            </h2>
-            <form onSubmit={handleStressSubmit} className="relative flex items-center">
-              <input
-                type="text"
-                value={stressInput}
-                onChange={(e) => setStressInput(e.target.value)}
-                placeholder="e.g., 'I have an electronics lab exam tomorrow morning and haven't opened the notebook...'"
-                disabled={isLoading}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3.5 pl-4 pr-24 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 transition-all disabled:opacity-50"
-              />
-              <div className="absolute right-2 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  title="Voice Input (Coming Soon)"
-                  className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition"
-                >
-                  <Mic className="w-4 h-4" />
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !stressInput.trim()}
-                  className="bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 text-white disabled:text-zinc-500 text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 transition shadow-lg shadow-rose-600/10"
-                >
-                  {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  Triage
-                </button>
-              </div>
-            </form>
-          </section>
-
-          {/* Panic Triage Zone Grid */}
-          <section className="space-y-4">
-            <h2 className="text-base font-bold text-white tracking-wide">Panic Triage Zone</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {recentTasks.map((task, idx) => (
-                <div key={idx} className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between shadow-md hover:border-zinc-700 transition">
-                  <div>
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <h3 className="font-semibold text-sm text-white line-clamp-1">{task.taskName}</h3>
-                      <div className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${getPanicColor(task.panicScore)}`}>
-                        {task.panicScore}%
-                      </div>
-                    </div>
-                    <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">{task.urgencyReason}</p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
-                    <span className="capitalize bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800 text-zinc-400">
-                      Mode: {task.actionHubType.replace("_", " ")}
-                    </span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Activated</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Context-Aware Action Hub Container */}
-          <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
-            <h2 className="text-base font-bold text-white mb-4 tracking-wide flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-400" /> Active Execution Sandbox
-            </h2>
+          {/* Column 1 & 2: Panic Triage & Dynamic Action Hub */}
+          <div className="lg:col-span-2 space-y-6">
             
-            {currentTask ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-rose-500">Currently Calibrating</span>
-                  <h3 className="text-base font-semibold text-white mt-0.5">{currentTask.taskName}</h3>
+            {/* Panic Triage Card */}
+            {apiResponse && (
+              <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-6 shadow-md backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <span className="text-xs font-mono uppercase tracking-wider text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                      Panic Triage Zone
+                    </span>
+                    <h2 className="text-xl font-bold mt-2 text-zinc-100">{apiResponse.taskName}</h2>
+                  </div>
+                  {/* Gauge */}
+                  <div className="flex flex-col items-center justify-center bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 shrink-0">
+                    <span className="text-2xl font-black font-mono text-red-500">{apiResponse.panicScore}%</span>
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono mt-0.5">Panic Score</span>
+                  </div>
                 </div>
+                <p className="text-sm text-zinc-400 leading-relaxed font-sans border-l-2 border-zinc-700 pl-3 italic">
+                  "{apiResponse.calculatedUrgencyReason}"
+                </p>
 
-                {currentTask.actionHubType === "mock_interview" && (
-                  <div className="bg-zinc-950 rounded-xl border border-zinc-800 p-4 space-y-4">
-                    <p className="text-xs text-zinc-300">🎯 <strong className="text-white">AI Viva Prep Assistant Loaded:</strong> Ready to challenge your understanding before the evaluation deadline kicks off.</p>
-                    <div className="h-32 bg-zinc-900 rounded-lg p-3 text-xs text-zinc-500 overflow-y-auto italic flex items-center justify-center border border-zinc-800/40">
-                      [Interactive Mock Interview Chat Workspace Initialized]
-                    </div>
-                    <input type="text" placeholder="Type response to AI examiner..." className="w-full bg-zinc-900 border border-zinc-800 text-xs rounded-lg p-2.5 focus:outline-none" disabled />
+                {/* Progress Indicators */}
+                <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-2 gap-4 text-xs font-mono text-zinc-500">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                    Database Schema Submission: <span className="text-zinc-300 font-bold">45%</span>
                   </div>
-                )}
-
-                {currentTask.actionHubType === "draft_generator" && (
-                  <div className="bg-zinc-950 rounded-xl border border-zinc-800 p-4 space-y-3">
-                    <p className="text-xs text-zinc-300">📝 <strong className="text-white">AI Draft Studio Ready:</strong> Edit and copy your automatically generated response script immediately below.</p>
-                    <textarea rows={4} className="w-full bg-zinc-900 border border-zinc-800 text-xs rounded-lg p-3 text-zinc-300 focus:outline-none resize-none" defaultValue={`Dear Team,\n\nRegarding the urgent deliverables for "${currentTask.taskName}"...`} />
+                  <div className="flex items-center gap-2 justify-end">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Context Status: <span className="text-emerald-400 font-bold">Triage Active</span>
                   </div>
-                )}
-
-                {currentTask.actionHubType === "research_summary" && (
-                  <div className="bg-zinc-950 rounded-xl border border-zinc-800 p-4 space-y-2">
-                    <p className="text-xs text-zinc-300">📚 <strong className="text-white">AI Study Cheat-Sheet Summary:</strong> Concentrated high-impact knowledge blocks compiled from your prompt baseline context.</p>
-                    <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-800/60 text-xs text-zinc-400 space-y-1.5">
-                      <p>• High Priority Core Architecture Breakdown</p>
-                      <p>• Emergency Verification Protocols Block</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="h-40 bg-zinc-950 rounded-xl border border-zinc-800/60 border-dashed flex flex-col items-center justify-center text-center p-4">
-                <Sparkles className="w-6 h-6 text-zinc-600 mb-2" />
-                <p className="text-xs text-zinc-500">No active triage event running.</p>
-                <p className="text-[11px] text-zinc-600 mt-0.5">Submit a deadline threat above to launch targeted execution workspaces.</p>
+                </div>
               </div>
             )}
-          </section>
 
-        </div>
+            {/* Dynamic Action Hub Sandbox */}
+            <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-6 shadow-md backdrop-blur-sm">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-sm font-bold tracking-tight text-zinc-200">
+                    AI Draft Studio Ready: Sandbox Active
+                  </h3>
+                </div>
+                <button 
+                  onClick={handleCopy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-400 hover:text-zinc-200 transition"
+                >
+                  {copied ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? "Copied!" : "Copy Script"}
+                </button>
+              </div>
 
-        {/* Right Sidebar: AI Time-Blocker Timeline */}
-        <div className="space-y-6">
-          <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl sticky top-6">
-            <div className="flex items-center justify-between mb-5 pb-3 border-b border-zinc-800">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-emerald-400" /> Time-Blocker
-              </h3>
-              <button 
-                onClick={handleSyncToGoogleCalendar}
-                className="px-3 py-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-lg shadow-emerald-600/10 transition flex items-center gap-1"
-              >
-                📅 Sync to Google Calendar
-              </button>
+              {/* DYNAMIC TEXT CONTAINER */}
+              <div className="relative group">
+                <textarea
+                  value={apiResponse?.generatedScript || ""}
+                  onChange={(e) => {
+                    if (apiResponse) {
+                      setApiResponse({ ...apiResponse, generatedScript: e.target.value });
+                    }
+                  }}
+                  placeholder="No script active. Submit a scenario using the input bar above to populate your production sandbox script container on the fly."
+                  className="w-full h-56 p-4 bg-zinc-950 border border-zinc-800/80 rounded-xl text-zinc-300 font-mono text-sm leading-relaxed focus:outline-none focus:border-zinc-700 resize-none shadow-inner group-hover:border-zinc-800 transition"
+                />
+              </div>
+              <p className="text-[11px] text-zinc-500 font-mono mt-2 text-right">
+                Edit and copy your automatically generated response script immediately above.
+              </p>
             </div>
+          </div>
 
-            {currentTask && currentTask.microSessions.length > 0 ? (
-              <div className="relative pl-4 border-l-2 border-zinc-800 space-y-6">
-                {currentTask.microSessions.map((session, index) => (
-                  <div key={index} className="relative group">
-                    {/* Ring Icon indicator along timeline rule line */}
-                    <div className="absolute -left-[21px] top-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 border border-zinc-950 group-hover:scale-125 transition" />
-                    
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="font-medium text-zinc-200 group-hover:text-rose-400 transition">
-                          {session.title}
-                        </span>
-                        <span className="text-[10px] text-zinc-500 font-mono bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 flex items-center gap-1">
-                          <Clock className="w-2.5 h-2.5 text-zinc-500" /> {session.durationMinutes}m
-                        </span>
+          {/* Column 3: Chronological Time-Blocker */}
+          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-6 shadow-md backdrop-blur-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 border-b border-zinc-800 pb-4 mb-4">
+                <Calendar className="w-4 h-4 text-orange-400" />
+                <h3 className="text-sm font-bold tracking-tight text-zinc-200">AI Intelligent Time-Blocker</h3>
+              </div>
+
+              <div className="space-y-4 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-px before:bg-zinc-800">
+                {apiResponse && apiResponse.microSessions.map((session, idx) => (
+                  <div key={idx} className="flex items-start gap-4 relative group">
+                    <div className="w-7 h-7 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center text-xs font-mono font-bold text-zinc-400 group-hover:border-orange-500/50 transition shrink-0 z-10">
+                      {idx + 1}
+                    </div>
+                    <div className="bg-zinc-950/60 border border-zinc-800/60 group-hover:border-zinc-800 rounded-xl p-3.5 flex-1 transition">
+                      <h4 className="text-xs font-bold text-zinc-200">{session.title}</h4>
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-500 mt-1.5">
+                        <Clock className="w-3 h-3 text-zinc-600" />
+                        Duration: {session.durationMinutes} mins
                       </div>
-                      <p className="text-[11px] text-zinc-500 leading-normal">
-                        Sequential Sprint Interval #{index + 1}
-                      </p>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="h-56 flex flex-col items-center justify-center text-center text-zinc-600 border border-zinc-800/40 rounded-xl bg-zinc-950/60 p-4">
-                <Clock className="w-5 h-5 text-zinc-700 mb-2" />
-                <p className="text-xs">No Scheduled Micro-Sessions</p>
-                <p className="text-[10px] text-zinc-600 mt-0.5">Timeblocks show up here instantly post-triage.</p>
-              </div>
-            )}
-          </section>
-        </div>
+            </div>
 
+            {/* Action Trigger */}
+            <button 
+              type="button" 
+              onClick={() => alert("Successfully simulated micro-session orchestration timeline sync to Google Calendar API hooks!")}
+              className="mt-6 w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.99] text-zinc-950 text-xs font-bold font-mono tracking-wide uppercase rounded-xl shadow-lg shadow-emerald-500/10 transition"
+            >
+              <Calendar className="w-4 h-4" /> Sync to Google Calendar
+            </button>
+          </div>
+
+        </div>
       </main>
     </div>
   );
